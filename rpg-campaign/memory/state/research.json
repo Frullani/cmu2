@@ -1,0 +1,21 @@
+{
+  "as_of_day": 1,
+  "as_of_year": "",
+  "compute": {
+    "substrate_baseline_multiplier": 1.0,
+    "substrate_generations_active": [
+      "v1"
+    ],
+    "notes": "Compute substrate technology generation(s) currently in service"
+  },
+  "domains": [],
+  "active_projects": [],
+  "milestones": [],
+  "capability_stack": [],
+  "history": [
+    {
+      "day": 1,
+      "type": "init"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "as_of_day": 1,
+  "as_of_year": "",
+  "inner_circle": [],
+  "outer_circle_default": true,
+  "partial_read_in": [],
+  "notes": "Who knows what. inner_circle: full read-in. partial_read_in: specific topics. Everyone else is outer-circle (cover narrative only).",
+  "history": [
+    {
+      "day": 1,
+      "type": "init"
+    }
+  ]
+}

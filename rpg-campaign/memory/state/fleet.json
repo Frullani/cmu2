@@ -1,0 +1,18 @@
+{
+  "as_of_day": 1,
+  "as_of_year": "",
+  "ships": [],
+  "drones": [],
+  "droids": {
+    "by_location": {},
+    "by_generation": {},
+    "total": 0,
+    "notes": "Humanoid droid fleet — count by location and generation"
+  },
+  "history": [
+    {
+      "day": 1,
+      "type": "init"
+    }
+  ]
+}
