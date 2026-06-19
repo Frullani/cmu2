@@ -132,7 +132,7 @@ for bar in range(BARS):
             t += SWING
         if random.random() < 0.12:
             continue
-        v = random.choice([26, 30, 34, 60])     # mostly ghost, occasional accent
+        v = random.choice([42, 48, 54, 82])     # audible dusty hats + accents
         nt = 46 if (i == 5 and random.random() < 0.3) else 42  # rare open hat
         drums.insert(hum(t, .02), mknote(nt, v))
     # end-of-8-bars dusty fill (stutter snare roll)
@@ -219,103 +219,140 @@ def insert_program(track, program):
     track.insert(pos, Message('program_change', program=program, time=0))
 
 mid = MidiFile(mid_path)
+
+def scale_velocity(track, factor, floor=0):
+    for msg in track:
+        if msg.type == 'note_on' and msg.velocity > 0:
+            msg.velocity = max(floor, min(127, int(msg.velocity * factor)))
+
 for i, track in enumerate(mid.tracks):
-    if i == 1:                       # drums -> channel 9
+    if i == 1:                       # drums -> channel 9, push them forward
         for msg in track:
             if hasattr(msg, 'channel'):
                 msg.channel = 9
+        scale_velocity(track, 1.3, floor=44)
     elif i in PROG:
         insert_program(track, PROG[i])
+        if i == 6:                   # choir aahs - make the voices sing out
+            scale_velocity(track, 1.0);
+            for msg in track:
+                if msg.type == 'note_on' and msg.velocity > 0:
+                    msg.velocity = 90
+        elif i == 7:                 # vocal chops - present
+            for msg in track:
+                if msg.type == 'note_on' and msg.velocity > 0:
+                    msg.velocity = 95
 mid.save(mid_path)
-print("Instruments + channels set")
+print("Instruments + channels + mix-velocities set")
 
 # ----------------------------------------------------------------------------
-# 3) RENDER
+# 3) RENDER AS STEMS (so drums & voices are clearly audible, not buried)
 # ----------------------------------------------------------------------------
-raw_wav = os.path.join(OUT, "_raw2.wav")
-FluidSynth(SF, sample_rate=SR).midi_to_audio(mid_path, raw_wav)
-print("FluidSynth rendered")
+def render_tracks(track_idxs, name):
+    stem = MidiFile(ticks_per_beat=mid.ticks_per_beat)
+    meta = mido.MidiTrack()
+    meta.append(mido.MetaMessage('set_tempo', tempo=mido.bpm2tempo(BPM), time=0))
+    stem.tracks.append(meta)
+    for idx in track_idxs:
+        stem.tracks.append(mid.tracks[idx])
+    mp = os.path.join(OUT, f"_stem_{name}.mid")
+    wp = os.path.join(OUT, f"_stem_{name}.wav")
+    stem.save(mp)
+    FluidSynth(SF, sample_rate=SR).midi_to_audio(mp, wp)
+    sr_, d = wavfile.read(wp)
+    a = (d.astype(np.float32) / 32768.0) if d.dtype == np.int16 else d.astype(np.float32)
+    if a.ndim == 1:
+        a = np.stack([a, a], axis=1)
+    os.remove(mp); os.remove(wp)
+    return a
 
-sr, data = wavfile.read(raw_wav)
-x = (data.astype(np.float32) / 32768.0) if data.dtype == np.int16 else data.astype(np.float32)
-if x.ndim == 1:
-    x = np.stack([x, x], axis=1)
-N = len(x)
+import mido
+stem_drums  = render_tracks([1], "drums")
+stem_voices = render_tracks([6, 7], "voices")
+stem_music  = render_tracks([2, 3, 4, 5, 8, 9], "music")
+print("Stems rendered")
 
-# ----------------------------------------------------------------------------
-# 4) TAPE WOW/FLUTTER (dusty pitch wobble) — periodic over the loop
-# ----------------------------------------------------------------------------
-loop_N = int(round(TOTAL * 60.0 / BPM * sr))
-n_idx = np.arange(N)
-# integer cycles over the loop keep the wobble seamless at the boundary
-wow   = (0.0022 * sr) * np.sin(2*np.pi * 8   / loop_N * n_idx)   # slow drift
-flut  = (0.0006 * sr) * np.sin(2*np.pi * 220 / loop_N * n_idx)   # fast flutter
-read = n_idx + wow + flut
-read = np.clip(read, 0, N - 1)
-xw = np.empty_like(x)
-for ch in range(2):
-    xw[:, ch] = np.interp(read, n_idx, x[:, ch])
-x = xw
+SR_ = SR
+loop_N = int(round(TOTAL * 60.0 / BPM * SR_))
 
-# ----------------------------------------------------------------------------
-# 5) CAVERNOUS REVERB (decorrelated L/R, full tail kept)
-# ----------------------------------------------------------------------------
 def make_ir(seconds, decay, predelay_ms, seed):
     g = np.random.default_rng(seed)
-    n = int(seconds * sr)
+    n = int(seconds * SR_)
     env = np.exp(-np.linspace(0, 1, n) / decay)
     ir = g.standard_normal(n) * env
-    ir = sosfilt(butter(2, 3500, 'low', fs=sr, output='sos'), ir)
-    ir = np.concatenate([np.zeros(int(predelay_ms/1000*sr)), ir])
+    ir = sosfilt(butter(2, 3500, 'low', fs=SR_, output='sos'), ir)
+    ir = np.concatenate([np.zeros(int(predelay_ms/1000*SR_)), ir])
     return (ir / (np.max(np.abs(ir)) or 1.0)).astype(np.float32)
 
-irL = make_ir(3.4, 0.40, 26, 1)
-irR = make_ir(3.6, 0.43, 39, 2)
-wetL = fftconvolve(x[:, 0], irL)
-wetR = fftconvolve(x[:, 1], irR)
-L = max(len(wetL), len(wetR))
-wet = np.zeros((L, 2), dtype=np.float32)
-wet[:len(wetL), 0] = wetL; wet[:len(wetR), 1] = wetR
-wet /= (np.max(np.abs(wet)) or 1.0)
+def reverb(sig, wet, sd, dec, secs):
+    """wet/dry mix; returns array longer than sig by the IR tail."""
+    irL = make_ir(secs, dec, 26, sd); irR = make_ir(secs + 0.2, dec, 39, sd + 100)
+    wl = fftconvolve(sig[:, 0], irL); wr = fftconvolve(sig[:, 1], irR)
+    Ln = max(len(wl), len(wr))
+    w = np.zeros((Ln, 2), dtype=np.float32)
+    w[:len(wl), 0] = wl; w[:len(wr), 1] = wr
+    w /= (np.max(np.abs(w)) or 1.0)
+    out = np.zeros((Ln, 2), dtype=np.float32)
+    out[:len(sig)] += (1.0 - wet) * sig
+    out += wet * w
+    return out
 
-WET = 0.34                           # lighter than v1 so drums keep punch
-xpad = np.zeros((L, 2), dtype=np.float32); xpad[:N] = x
-y_full = (1.0 - WET) * xpad + WET * wet
+# normalize each stem to unit peak first, then place with deliberate gains
+def norm(a):
+    return a / (np.max(np.abs(a)) or 1.0)
 
-# wrap reverb tail / releases back onto the start -> seamless loop
-y = y_full[:loop_N].copy()
-tail = y_full[loop_N:]
+d = reverb(norm(stem_drums),  0.16, 1, 0.30, 2.4) * 1.00   # punchy, dry-ish, LOUD
+v = reverb(norm(stem_voices), 0.42, 3, 0.45, 3.2) * 0.80   # present, airy
+mus = reverb(norm(stem_music), 0.55, 5, 0.45, 3.6) * 0.62  # cavernous bed
+
+L = max(len(d), len(v), len(mus))
+mix = np.zeros((L, 2), dtype=np.float32)
+for s in (d, v, mus):
+    mix[:len(s)] += s
+
+# seamless loop: wrap tails (releases + reverb) back to the start
+y = mix[:loop_N].copy()
+tail = mix[loop_N:]
 M = min(len(tail), loop_N)
 y[:M] += tail[:M]
 
 # ----------------------------------------------------------------------------
-# 6) DUST: vinyl crackle + hiss, lo-fi filtering + soft saturation
+# 4) TAPE WOW/FLUTTER over the loop (periodic -> seamless)
 # ----------------------------------------------------------------------------
-# sparse vinyl crackle (random pops) + faint continuous hiss
+n_idx = np.arange(loop_N)
+wow  = (0.0022 * SR_) * np.sin(2*np.pi * 8   / loop_N * n_idx)
+flut = (0.0006 * SR_) * np.sin(2*np.pi * 220 / loop_N * n_idx)
+read = np.clip(n_idx + wow + flut, 0, loop_N - 1)
+yw = np.empty_like(y)
+for ch in range(2):
+    yw[:, ch] = np.interp(read, n_idx, y[:, ch])
+y = yw
+
+# ----------------------------------------------------------------------------
+# 5) DUST: vinyl crackle + hiss, lo-fi + soft saturation
+# ----------------------------------------------------------------------------
 crackle = np.zeros((loop_N, 2), dtype=np.float32)
-n_pops = int(loop_N / sr * 55)       # ~55 pops/sec
+n_pops = int(loop_N / SR_ * 60)
 idx = rng.integers(0, loop_N, n_pops)
-amp = (rng.random(n_pops) ** 3) * 0.18
+amp = (rng.random(n_pops) ** 3) * 0.16
 for ch in range(2):
     sel = rng.random(n_pops) < 0.9
     crackle[idx[sel], ch] += amp[sel] * rng.choice([-1, 1], sel.sum())
-crackle = sosfilt(butter(2, 5000, 'low', fs=sr, output='sos'), crackle, axis=0)
-hiss = rng.standard_normal((loop_N, 2)).astype(np.float32) * 0.004
+crackle = sosfilt(butter(2, 5500, 'low', fs=SR_, output='sos'), crackle, axis=0)
+hiss = rng.standard_normal((loop_N, 2)).astype(np.float32) * 0.0035
 y = y + crackle + hiss
 
-# lo-fi: tame highs + clean sub, then gentle tape saturation
-y = sosfilt(butter(4, 5200, 'low',  fs=sr, output='sos'), y, axis=0)
-y = sosfilt(butter(2, 32,  'high', fs=sr, output='sos'), y, axis=0)
-y = np.tanh(y * 1.6) / np.tanh(1.6)  # warm saturation
+# lo-fi: keep enough top for hats to read as dusty drums
+y = sosfilt(butter(4, 8800, 'low',  fs=SR_, output='sos'), y, axis=0)
+y = sosfilt(butter(2, 32,  'high', fs=SR_, output='sos'), y, axis=0)
+y = np.tanh(y * 1.4) / np.tanh(1.4)
 
-# headroom: peak ~ -2.5 dBFS
-y = y / (np.max(np.abs(y)) or 1.0) * (10 ** (-2.5 / 20))
+y = y / (np.max(np.abs(y)) or 1.0) * (10 ** (-2.0 / 20))
 out16 = (np.clip(y, -1, 1) * 32767).astype(np.int16)
 
 proc_wav = os.path.join(OUT, "labyrinth_dustmix.wav")
-wavfile.write(proc_wav, sr, out16)
+wavfile.write(proc_wav, SR_, out16)
 mp3_path = os.path.join(OUT, "labyrinth_dustmix.mp3")
 seg = AudioSegment.from_wav(proc_wav)
 seg.export(mp3_path, format='mp3', bitrate='192k')
-os.remove(raw_wav)
 print(f"DONE  duration={len(seg)/1000:.1f}s  dBFS={seg.dBFS:.1f}  max={seg.max_dBFS:.1f}")
