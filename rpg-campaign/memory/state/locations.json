@@ -1,0 +1,13 @@
+{
+  "as_of_day": 1,
+  "as_of_year": "",
+  "bases": [],
+  "stations": [],
+  "construction_sites": [],
+  "history": [
+    {
+      "day": 1,
+      "type": "init"
+    }
+  ]
+}

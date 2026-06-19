@@ -1,0 +1,29 @@
+{
+  "as_of_day": 1,
+  "as_of_year": "",
+  "true_name": "",
+  "pronouns": "",
+  "species": "",
+  "age": "",
+  "physical_description": "",
+  "cover_identities": [],
+  "heritage_standings": [],
+  "attributes": {},
+  "skills": {},
+  "possessions": [],
+  "personal_items_carried": [],
+  "core_relationships": [],
+  "goals": {
+    "near_term": [],
+    "medium_term": [],
+    "long_term": []
+  },
+  "history_anchors": [],
+  "notes": "Character sheet for the player character. Update as the character develops.",
+  "history": [
+    {
+      "day": 1,
+      "type": "init"
+    }
+  ]
+}

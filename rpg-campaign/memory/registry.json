@@ -1,0 +1,44 @@
+{
+  "entities": {
+    "vega okonkwo": {
+      "file": "project_vega_okonkwo.md",
+      "name": "Vega Okonkwo",
+      "type": "project",
+      "description": "Dockmaster of Halsey Drift station; controls fuel access and berth assignments on the Reach's last reliable corridor stop.",
+      "frontmatter": {
+        "name": "Vega Okonkwo",
+        "aliases": [
+          "The Dockmaster",
+          "Okonkwo"
+        ],
+        "description": "Dockmaster of Halsey Drift station; controls fuel access and berth assignments on the Reach's last reliable corridor stop.",
+        "type": "project",
+        "species": "Human",
+        "faction": "Halsey Drift (station authority, nominally independent)",
+        "status": "active",
+        "read_in_tier": "outer",
+        "relationships": [
+          "Halsey Drift station authority (employer)",
+          "independent haulers (clientele)"
+        ],
+        "defer_to_user_on": [
+          "age",
+          "exact backstory",
+          "family",
+          "true loyalties",
+          "physical description beyond build"
+        ]
+      }
+    }
+  },
+  "by_alias": {
+    "the dockmaster": "vega okonkwo",
+    "okonkwo": "vega okonkwo"
+  },
+  "by_type": {
+    "project": [
+      "Vega Okonkwo"
+    ]
+  },
+  "count": 1
+}

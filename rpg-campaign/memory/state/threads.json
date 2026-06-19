@@ -1,0 +1,13 @@
+{
+  "as_of_day": 1,
+  "as_of_year": "",
+  "open_threads": [],
+  "resolved_threads": [],
+  "notes": "Open narrative threads / arcs in motion. Each thread carries name, status, pace, next_anchor_day, and brief context. Check before time-skipping to identify threads that need attention.",
+  "history": [
+    {
+      "day": 1,
+      "type": "init"
+    }
+  ]
+}

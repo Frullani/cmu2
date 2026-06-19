@@ -1,0 +1,14 @@
+{
+  "as_of_day": 1,
+  "as_of_year": "",
+  "primary_identity": "",
+  "active_covers": [],
+  "retired_covers": [],
+  "notes": "Cover identities the PC uses in different contexts. Each carries name, context (where used), first_used day, status, and any known compromise risk.",
+  "history": [
+    {
+      "day": 1,
+      "type": "init"
+    }
+  ]
+}
